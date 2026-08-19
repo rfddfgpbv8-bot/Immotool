@@ -137,13 +137,27 @@ function berechne(s) {
   const quote = kaufGesamt > 0 ? gebaeude / kaufGesamt : 0;
   const zuschuss = s.zuschussBetrag;
 
-  const bmgDegressiv = Math.max(
-    0,
-    gebaeude + (grest + notar + beratung) * quote - zuschuss
-  );
-  const bmg7bRoh = Math.max(0, gebaeude - zuschuss);
+  const anteiligeNebenkosten = (grest + notar + beratung) * quote;
+  const gebaeudeKostenGesamt = Math.max(0, gebaeude + anteiligeNebenkosten - zuschuss);
+  const istDenkmal = s.gebaeudeart === "denkmal";
+
+  // Neubau: Grundlagen für degressive/lineare AfA und § 7b
+  const bmgDegressiv = istDenkmal ? 0 : gebaeudeKostenGesamt;
+  const bmg7bRoh = istDenkmal ? 0 : Math.max(0, gebaeude - zuschuss);
   const kappung = s.bgf * s.max7bProQm;
-  const bmg7b = s.sonder7b ? Math.min(bmg7bRoh, kappung) : 0;
+  const bmg7b = !istDenkmal && s.sonder7b ? Math.min(bmg7bRoh, kappung) : 0;
+
+  // Neubau: gesetzliches Fenster der degressiven AfA (§ 7 Abs. 5a EStG), 1.10.2023–30.9.2029
+  const kvDatum = s.kaufvertragJahr + (s.kaufvertragMonat - 1) / 12;
+  const degressivMoeglich = kvDatum >= 2023 + 9 / 12 && kvDatum <= 2029 + 9 / 12;
+
+  // Denkmal: Aufteilung in Modernisierung (§ 7h/§ 7i) und Altbausubstanz (linear)
+  const denkmalModernisierung = istDenkmal
+    ? Math.max(0, gebaeudeKostenGesamt * (s.denkmalSanierungsanteil / 100))
+    : 0;
+  const denkmalAltbau = istDenkmal
+    ? Math.max(0, gebaeudeKostenGesamt - denkmalModernisierung)
+    : 0;
 
   const bis = s.endJahr;
   const sim = s.darlehen.map((d, i) =>
@@ -157,27 +171,44 @@ function berechne(s) {
 
   /* AfA */
   const afaProJahr = {};
-  let restwert = bmgDegressiv;
-  let sonderKumuliert = 0;
   const startJahr = s.fertigJahr;
   const ersterAnteil = (13 - s.fertigMonat) / 12;
 
-  for (let jahr = startJahr; jahr <= bis; jahr++) {
-    let normal = s.degressiv
-      ? restwert * (s.degressivSatz / 100)
-      : bmgDegressiv * (s.linearSatz / 100);
-    if (jahr === startJahr) normal *= ersterAnteil;
-    if (normal > restwert) normal = restwert;
-    restwert -= normal;
+  if (!istDenkmal) {
+    // Neubau: degressive oder lineare AfA + optional Sonder-AfA § 7b
+    let restwert = bmgDegressiv;
+    let sonderKumuliert = 0;
+    for (let jahr = startJahr; jahr <= bis; jahr++) {
+      let normal = s.degressiv
+        ? restwert * (s.degressivSatz / 100)
+        : bmgDegressiv * (s.linearSatz / 100);
+      if (jahr === startJahr) normal *= ersterAnteil;
+      if (normal > restwert) normal = restwert;
+      restwert -= normal;
 
-    let sonder = 0;
-    if (s.sonder7b && jahr < startJahr + s.sonder7bJahre) {
-      sonder = bmg7b * (s.sonder7bSatz / 100);
-      sonderKumuliert += sonder;
-      if (jahr === startJahr + s.sonder7bJahre - 1)
-        restwert = Math.max(0, restwert - sonderKumuliert);
+      let sonder = 0;
+      if (s.sonder7b && jahr < startJahr + s.sonder7bJahre) {
+        sonder = bmg7b * (s.sonder7bSatz / 100);
+        sonderKumuliert += sonder;
+        if (jahr === startJahr + s.sonder7bJahre - 1)
+          restwert = Math.max(0, restwert - sonderKumuliert);
+      }
+      afaProJahr[jahr] = { normal, sonder, gesamt: normal + sonder };
     }
-    afaProJahr[jahr] = { normal, sonder, gesamt: normal + sonder };
+  } else {
+    // Denkmal: § 7h/§ 7i auf die Modernisierung (zwei Zeitphasen), Altbausubstanz linear
+    for (let jahr = startJahr; jahr <= bis; jahr++) {
+      const jIndex = jahr - startJahr;
+      let denkmalAfa = 0;
+      if (jIndex < s.denkmalJahre1) denkmalAfa = denkmalModernisierung * (s.denkmalSatz1 / 100);
+      else if (jIndex < s.denkmalJahre1 + s.denkmalJahre2)
+        denkmalAfa = denkmalModernisierung * (s.denkmalSatz2 / 100);
+
+      let altbauAfa = denkmalAltbau * (s.denkmalAltbauSatz / 100);
+      if (jahr === startJahr) altbauAfa *= ersterAnteil;
+
+      afaProJahr[jahr] = { normal: altbauAfa, sonder: denkmalAfa, gesamt: altbauAfa + denkmalAfa };
+    }
   }
 
   /* Jahresreihen */
@@ -255,6 +286,50 @@ function berechne(s) {
   const ueberschuss =
     immobilienwert - letzte.restschuld - eigenkapital - kumAufwandVorSteuern + kumSteuerersparnis;
 
+  // Veräußerung: unabhängig vom Betrachtungsende zu jedem beliebigen Jahr durchspielbar
+  let veraeusserung = null;
+  if (s.veraeusserungAktiv) {
+    const vJahr = s.veraeusserungJahr;
+    const jahreWertV = Math.max(0, vJahr - s.wertSteigerungAb + 1);
+    const verkaufspreis = kaufGesamt * Math.pow(1 + s.wertSteigerung / 100, jahreWertV);
+    const verkaufskosten = verkaufspreis * (s.verkaufskostenSatz / 100);
+
+    const zeileV = zeilen.find((z) => z.jahr === vJahr);
+    const restschuldV = zeileV
+      ? zeileV.restschuld
+      : vJahr > bis
+      ? letzte.restschuld
+      : vJahr < startJahr
+      ? darlehenSumme
+      : 0;
+
+    let kumAfaBisV = 0;
+    for (let j = startJahr; j <= Math.min(vJahr, bis); j++)
+      if (afaProJahr[j]) kumAfaBisV += afaProJahr[j].gesamt;
+
+    const buchwert = Math.max(0, gesamtkosten - kumAfaBisV);
+    const veraeusserungsgewinn = verkaufspreis - verkaufskosten - buchwert;
+
+    const monateGehalten =
+      vJahr * 12 + s.veraeusserungMonat - (s.kaufvertragJahr * 12 + s.kaufvertragMonat);
+    const spekulationspflichtig = monateGehalten < 120;
+    const steuerpflichtig = spekulationspflichtig && veraeusserungsgewinn >= 600;
+
+    const zvEimVerkaufsjahr = zeileV ? zeileV.zvE : s.zvE;
+    const spekulationssteuer = steuerpflichtig
+      ? steuerlast(zvEimVerkaufsjahr + veraeusserungsgewinn, s, vJahr) -
+        steuerlast(zvEimVerkaufsjahr, s, vJahr)
+      : 0;
+
+    const nettoerloes = verkaufspreis - verkaufskosten - restschuldV - spekulationssteuer;
+
+    veraeusserung = {
+      jahr: vJahr, verkaufspreis, verkaufskosten, restschuld: restschuldV, buchwert,
+      gewinn: veraeusserungsgewinn, monateGehalten, spekulationspflichtig, steuerpflichtig,
+      steuer: spekulationssteuer, nettoerloes,
+    };
+  }
+
   const jahreAktiv = zeilen.filter((z) => z.jahr >= s.vermietungJahr).length || 1;
   const aufwandPM = kumAufwandNachSteuern / jahreAktiv / 12;
 
@@ -265,8 +340,9 @@ function berechne(s) {
     kaufGesamt, grest, notar, beratung, gesamtkosten, darlehenSumme, eigenkapital,
     darlehensbedarf, deckungslücke,
     gebaeude, grundstueck, quote, bmgDegressiv, bmg7b, bmg7bRoh, kappung,
+    degressivMoeglich, denkmalModernisierung, denkmalAltbau, gebaeudeKostenGesamt,
     zeilen, kumSteuerersparnis, kumAufwandVorSteuern, kumAufwandNachSteuern, aufwandPM,
-    immobilienwert, restschuldEnde: letzte.restschuld, ueberschuss,
+    immobilienwert, restschuldEnde: letzte.restschuld, ueberschuss, veraeusserung,
     irr: berechneIRR(irrFlows),
   };
 }
@@ -319,7 +395,7 @@ function pdfDatei(s, r, profil, grenz) {
   const W = 595.28, H = 841.89, M = 48, RE = W - M;
   const TINTE = "0.07 0.11 0.15";
   const GRAU = "0.42 0.49 0.55";
-  const AKZ = "0.05 0.55 0.44";
+  const AKZ = "0.059 0.318 0.196";
   const ROT = "0.72 0.31 0.18";
   const LINIE_F = "0.85 0.88 0.91";
   const FLAECHE = "0.955 0.968 0.975";
@@ -478,9 +554,15 @@ function pdfDatei(s, r, profil, grenz) {
   yr = paar(yr, spalteB, halb, "Kirchensteuer", eur(profil.kirche));
   yr = paar(yr, spalteB, halb, "Steuer gesamt", eur(profil.gesamt), true);
   yr = paar(yr, spalteB, halb, "Grenzsteuersatz", pct(grenz) + " %");
-  yr = paar(yr, spalteB, halb,
-    s.degressiv ? "Grundlage degressive AfA" : "Grundlage lineare AfA", eur(r.bmgDegressiv), true);
-  if (s.sonder7b) yr = paar(yr, spalteB, halb, "Grundlage Sonder-AfA § 7b", eur(r.bmg7b), true);
+  yr = paar(yr, spalteB, halb, "Gebäudeart", s.gebaeudeart === "denkmal" ? "Denkmal (§ 7h/7i)" : "Neubau");
+  if (s.gebaeudeart === "neubau") {
+    yr = paar(yr, spalteB, halb,
+      s.degressiv ? "Grundlage degressive AfA" : "Grundlage lineare AfA", eur(r.bmgDegressiv), true);
+    if (s.sonder7b) yr = paar(yr, spalteB, halb, "Grundlage Sonder-AfA § 7b", eur(r.bmg7b), true);
+  } else {
+    yr = paar(yr, spalteB, halb, "Grundlage Modernisierung § 7h/7i", eur(r.denkmalModernisierung), true);
+    yr = paar(yr, spalteB, halb, "Grundlage Altbau, linear", eur(r.denkmalAltbau), true);
+  }
 
   y = Math.max(yl, yr) + 14;
   y = abschnitt(y, "Annahmen");
@@ -556,7 +638,10 @@ function pdfDatei(s, r, profil, grenz) {
   y += 14;
   y = abschnitt(y, "Abschreibung und Restschuld");
   const sp3 = spaltenSatz(
-    ["Jahr", s.degressiv ? "Degressive AfA" : "Lineare AfA", "Sonder-AfA § 7b", "AfA gesamt", "Restschuld"],
+    ["Jahr",
+     s.gebaeudeart === "denkmal" ? "Altbau linear" : (s.degressiv ? "Degressive AfA" : "Lineare AfA"),
+     s.gebaeudeart === "denkmal" ? "Modernisierung 7h/7i" : "Sonder-AfA § 7b",
+     "AfA gesamt", "Restschuld"],
     40, 4
   );
   y = tabelle(y, sp3, r.zeilen.map((z) => [
@@ -641,6 +726,189 @@ function pdfDatei(s, r, profil, grenz) {
   return bytes;
 }
 
+/* ---------- KfW-Vorlagen ----------
+   Strukturdaten (Kreditrahmen, Programmlogik) sind stabil; Zinssätze sind
+   Richtwerte mit Datumsstempel — die KfW legt den tatsächlichen Zins erst
+   am Tag der Zusage fest und veröffentlicht keine feste Konditionentabelle.
+   Vor Nutzung immer bei der finanzierenden Bank / kfw.de gegenprüfen. */
+
+const KFW_VORLAGEN = [
+  // --- Klimafreundlicher Neubau (§§ 297/298) ---
+  {
+    id: "kfw298-eh40",
+    kategorie: "Neubau",
+    label: "KfW 298 · Klimafreundlicher Neubau, EH40 ohne QNG (vermietet)",
+    gebaeudeart: "neubau",
+    name: "KfW 298 (EH40)",
+    betrag: 100000,
+    zins: 1.0,
+    tilgung: 2,
+    zinsbindung: 10,
+    anschlusszins: 3.7,
+    hinweis: "Bis 100.000 €/Wohneinheit, für Vermieter/Kapitalanleger. Zinsrichtwert rund 1,0 % eff., Stand Sommer 2026.",
+  },
+  {
+    id: "kfw298-eh40-qng",
+    kategorie: "Neubau",
+    label: "KfW 298 · Klimafreundlicher Neubau, EH40 mit QNG (vermietet)",
+    gebaeudeart: "neubau",
+    name: "KfW 298 (EH40, QNG)",
+    betrag: 150000,
+    zins: 1.5,
+    tilgung: 2,
+    zinsbindung: 10,
+    anschlusszins: 3.7,
+    hinweis: "Bis 150.000 €/Wohneinheit, kein Tilgungszuschuss. Zinsrichtwert 1,5 % eff., Stand Juni 2026 — ändert sich laufend.",
+  },
+  {
+    id: "kfw298-eh55",
+    kategorie: "Neubau",
+    label: "KfW 298 · Klimafreundlicher Neubau, EH55 (befristet, vermietet)",
+    gebaeudeart: "neubau",
+    name: "KfW 298 (EH55)",
+    betrag: 100000,
+    zins: 1.0,
+    tilgung: 2,
+    zinsbindung: 10,
+    anschlusszins: 3.7,
+    hinweis: "Bis 100.000 €/Wohneinheit, befristete Förderstufe, Fristverlängerung wird geprüft. Zinsrichtwert 1,0 % eff., Stand Juni 2026.",
+  },
+  {
+    id: "kfw297-eigennutzung",
+    kategorie: "Neubau",
+    label: "KfW 297 · Klimafreundlicher Neubau (nur Eigennutzung)",
+    gebaeudeart: "neubau",
+    name: "KfW 297 (Eigennutzung)",
+    betrag: 150000,
+    zins: 1.2,
+    tilgung: 2,
+    zinsbindung: 10,
+    anschlusszins: 3.7,
+    hinweis: "Nur für selbst bewohnte Einheiten, nicht für vermietete Kapitalanlagen — für die eigengenutzte Einheit in einem gemischten Objekt relevant.",
+  },
+  {
+    id: "kfw296-niedrigpreis",
+    kategorie: "Neubau",
+    label: "KfW 296 · Niedrigpreissegment Neubau",
+    gebaeudeart: "neubau",
+    name: "KfW 296 (Niedrigpreissegment)",
+    betrag: 100000,
+    zins: 1.5,
+    tilgung: 2,
+    zinsbindung: 10,
+    anschlusszins: 3.7,
+    hinweis: "Kostengünstiger Neubau ab EH55, mit Flächen- und Kostenobergrenzen; nicht kombinierbar mit 297/298/300 für dieselbe Einheit. Eignung für Vermietung vorab prüfen.",
+  },
+  {
+    id: "kfw300-familie",
+    kategorie: "Neubau",
+    label: "KfW 300 · Wohneigentum für Familien (nur Eigennutzung)",
+    gebaeudeart: "neubau",
+    name: "KfW 300 (Familien)",
+    betrag: 270000,
+    zins: 0.8,
+    tilgung: 2,
+    zinsbindung: 10,
+    anschlusszins: 3.7,
+    hinweis: "Nur für Familien mit Kind(ern), zvE-Grenze 90.000 € (+10.000 €/Kind), zwingend Eigennutzung — nicht für Kapitalanlage.",
+  },
+
+  // --- Sanierung / Bestand (§ 261, inkl. Effizienzhaus Denkmal) ---
+  {
+    id: "kfw261-denkmal",
+    kategorie: "Sanierung",
+    label: "KfW 261 · Sanierung, Effizienzhaus Denkmal",
+    gebaeudeart: "denkmal",
+    name: "KfW 261 (Denkmal)",
+    betrag: 150000,
+    zins: 2.5,
+    tilgung: 2,
+    zinsbindung: 10,
+    anschlusszins: 3.7,
+    hinweis: "Bis 150.000 €/Wohneinheit. Tilgungszuschuss auf Denkmal-Basisstufe seit 21.7.2026 bei 0 %. Zinsrichtwert 2,5 % eff., Stand Juli 2026.",
+  },
+  {
+    id: "kfw261-eh40",
+    kategorie: "Sanierung",
+    label: "KfW 261 · Sanierung zum Effizienzhaus 40",
+    gebaeudeart: "denkmal",
+    name: "KfW 261 (EH40 Sanierung)",
+    betrag: 150000,
+    zins: 2.0,
+    tilgung: 2,
+    zinsbindung: 10,
+    anschlusszins: 3.7,
+    hinweis: "Höchste Sanierungsstufe, Tilgungszuschuss rund 10 % seit der Kürzung am 21.7.2026 (zzgl. möglicher EE-/NH-/WPB-Boni). Zinsrichtwert 2,0 % eff.",
+  },
+  {
+    id: "kfw261-eh55-85",
+    kategorie: "Sanierung",
+    label: "KfW 261 · Sanierung EH55/EH70/EH85",
+    gebaeudeart: "denkmal",
+    name: "KfW 261 (EH55–85 Sanierung)",
+    betrag: 150000,
+    zins: 2.6,
+    tilgung: 2,
+    zinsbindung: 10,
+    anschlusszins: 3.7,
+    hinweis: "Tilgungszuschuss je nach Stufe 0–5 %, EH70/85 seit 21.7.2026 ohne Zuschuss. Genaue Stufe und Zuschuss im aktuellen KfW-Merkblatt prüfen.",
+  },
+  {
+    id: "kfw308-jung-kauft-alt",
+    kategorie: "Sanierung",
+    label: "KfW 308 · Jung kauft Alt (nur Eigennutzung)",
+    gebaeudeart: "denkmal",
+    name: "KfW 308 (Jung kauft Alt)",
+    betrag: 180000,
+    zins: 1.5,
+    tilgung: 2,
+    zinsbindung: 10,
+    anschlusszins: 3.7,
+    hinweis: "Für Familien mit Kind(ern), Kauf + energetische Sanierung eines Altbaus, zwingend Eigennutzung — nicht für Kapitalanlage. Höchstbetrag 2026 auf 180.000 € angehoben.",
+  },
+
+  // --- Allgemein / sonstige ---
+  {
+    id: "kfw124-wohneigentum",
+    kategorie: "Allgemein",
+    label: "KfW 124 · Wohneigentumsprogramm (ohne Energiestandard)",
+    gebaeudeart: null,
+    name: "KfW 124 (Wohneigentum)",
+    betrag: 100000,
+    zins: 3.5,
+    tilgung: 2,
+    zinsbindung: 10,
+    anschlusszins: 4.0,
+    hinweis: "Bis 100.000 €, keine Einkommens- oder Energieauflagen. Ob vermietete Kapitalanlagen mitfinanziert werden können, vorab mit der Bank klären. Zinsrichtwert rund 3,5 % eff., Stand Frühjahr 2026.",
+  },
+  {
+    id: "kfw159-barrierefrei",
+    kategorie: "Allgemein",
+    label: "KfW 159 · Altersgerecht Umbauen",
+    gebaeudeart: null,
+    name: "KfW 159 (Barrierefrei)",
+    betrag: 50000,
+    zins: 3.0,
+    tilgung: 2,
+    zinsbindung: 10,
+    anschlusszins: 4.0,
+    hinweis: "Kredit für barrierereduzierenden Umbau, auch für vermietete Einheiten nutzbar. Bis 50.000 € je Wohneinheit.",
+  },
+  {
+    id: "markt-10j",
+    kategorie: "Allgemein",
+    label: "Marktdarlehen, 10 Jahre Zinsbindung",
+    gebaeudeart: null,
+    name: "Bankdarlehen (Markt)",
+    betrag: 150000,
+    zins: 3.7,
+    tilgung: 2,
+    zinsbindung: 10,
+    anschlusszins: 4.2,
+    hinweis: "Richtwert für Baufinanzierungen ohne Förderung, ca. 3,5–4,5 % je nach Bank und Bonität, Stand Sommer 2026.",
+  },
+];
+
 /* ---------- Startwerte ---------- */
 
 const START = {
@@ -698,6 +966,10 @@ const START = {
   zuschussMonat: 8,
   zuschussDarlehen: 0,
 
+  gebaeudeart: "neubau",
+  kaufvertragJahr: 2026,
+  kaufvertragMonat: 9,
+
   degressiv: true,
   degressivSatz: 5,
   linearSatz: 3,
@@ -706,8 +978,20 @@ const START = {
   sonder7bJahre: 4,
   max7bProQm: 4000,
 
+  denkmalSanierungsanteil: 60,
+  denkmalAltbauSatz: 2,
+  denkmalSatz1: 9,
+  denkmalJahre1: 8,
+  denkmalSatz2: 7,
+  denkmalJahre2: 4,
+
   wertSteigerung: 2,
   wertSteigerungAb: 2028,
+
+  veraeusserungAktiv: false,
+  veraeusserungJahr: 2038,
+  veraeusserungMonat: 12,
+  verkaufskostenSatz: 0,
 };
 
 /* ---------- Bausteine ---------- */
@@ -909,7 +1193,7 @@ function Vermoegenskurve({ zeilen, s }) {
 export default function App() {
   const [s, setS] = useState(START);
   const [tab, setTab] = useState("liquiditaet");
-  const [hell, setHell] = useState(false);
+  const [hell, setHell] = useState(true);
 
   const set = (k) => (v) => setS((alt) => ({ ...alt, [k]: v }));
   const setDarlehen = (i, k) => (v) =>
@@ -1094,6 +1378,9 @@ export default function App() {
               offenStd={false}
               kinder={
                 <>
+                  <Feld label="Kaufvertrag Jahr" wert={s.kaufvertragJahr} onChange={set("kaufvertragJahr")}
+                    hinweis="Maßgeblich für die 10-Jahres-Spekulationsfrist § 23 EStG und, bei Neubau, für das Zeitfenster der degressiven AfA" />
+                  <Feld label="Kaufvertrag Monat" wert={s.kaufvertragMonat} onChange={set("kaufvertragMonat")} />
                   <Feld label="Erstes Berechnungsjahr" wert={s.startJahr} onChange={set("startJahr")} />
                   <Feld label="Fertigstellung Jahr" wert={s.fertigJahr} onChange={set("fertigJahr")} />
                   <Feld label="Fertigstellung Monat" wert={s.fertigMonat} onChange={set("fertigMonat")}
@@ -1179,6 +1466,47 @@ export default function App() {
                         { name: "Weiteres Darlehen", betrag: 50000, zins: 3.8, tilgung: 2, zinsbindung: 10, anschlusszins: 4 }],
                     }))
                   }>Darlehen hinzufügen</button>
+
+                  <div className="trenner">Vorlagen als Startpunkt — Zinssatz danach vom Berater eintragen</div>
+                  {["Neubau", "Sanierung", "Allgemein"].map((kat) => {
+                    const treffer = KFW_VORLAGEN.filter(
+                      (v) => v.kategorie === kat && (!v.gebaeudeart || v.gebaeudeart === s.gebaeudeart)
+                    );
+                    if (!treffer.length) return null;
+                    return (
+                      <div key={kat} className="vorlagen-gruppe">
+                        <span className="vorlagen-kategorie">{kat}</span>
+                        <div className="vorlagen">
+                          {treffer.map((v) => (
+                            <button
+                              key={v.id}
+                              className="vorlage"
+                              onClick={() =>
+                                setS((alt) => ({
+                                  ...alt,
+                                  darlehen: [...alt.darlehen, {
+                                    name: v.name, betrag: v.betrag, zins: v.zins, tilgung: v.tilgung,
+                                    zinsbindung: v.zinsbindung, anschlusszins: v.anschlusszins,
+                                  }],
+                                }))
+                              }
+                            >
+                              <span className="vorlage-titel">{v.label}</span>
+                              <span className="vorlage-hinweis">{v.hinweis}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <span className="feld-hinweis">
+                    Nur ein grober Startpunkt (Stand der jeweiligen KfW-Merkblätter). Sollzins,
+                    Anschlusszins, Tilgung und Betrag anschließend immer mit dem tatsächlichen,
+                    tagesaktuellen Angebot der Bank oder des Beraters überschreiben — jedes Feld
+                    bleibt frei editierbar. Programme mit dem Hinweis „nur Eigennutzung" scheiden
+                    für vermietete Kapitalanlagen aus und sind nur der Vollständigkeit halber gelistet.
+                  </span>
+
                   <div className="trenner">Tilgungszuschuss</div>
                   <Feld label="Zuschuss" wert={s.zuschussBetrag} onChange={set("zuschussBetrag")} suffix="€"
                     hinweis="Mindert die Anschaffungskosten und wird als Sondertilgung verrechnet" />
@@ -1197,18 +1525,57 @@ export default function App() {
               offenStd={false}
               kinder={
                 <>
-                  <Schalter label="Degressive AfA § 7 Abs. 5a EStG" wert={s.degressiv} onChange={set("degressiv")}
-                    hinweis="Fester Satz vom jeweiligen Restwert" />
-                  {s.degressiv
-                    ? <Feld label="Degressiver Satz" wert={s.degressivSatz} onChange={set("degressivSatz")} suffix="%" />
-                    : <Feld label="Linearer Satz" wert={s.linearSatz} onChange={set("linearSatz")} suffix="%" />}
-                  <Schalter label="Sonderabschreibung § 7b EStG" wert={s.sonder7b} onChange={set("sonder7b")}
-                    hinweis="Zusätzlich in den ersten Jahren, ohne Zeitanteil im Fertigstellungsjahr" />
-                  {s.sonder7b && (
+                  <Segment
+                    label="Gebäudeart"
+                    wert={s.gebaeudeart}
+                    onChange={set("gebaeudeart")}
+                    optionen={[
+                      { v: "neubau", t: "Neubau" },
+                      { v: "denkmal", t: "Denkmal" },
+                    ]}
+                  />
+
+                  {s.gebaeudeart === "neubau" && (
                     <>
-                      <Feld label="Satz je Jahr" wert={s.sonder7bSatz} onChange={set("sonder7bSatz")} suffix="%" />
-                      <Feld label="Begünstigungszeitraum" wert={s.sonder7bJahre} onChange={set("sonder7bJahre")} suffix="Jahre" />
-                      <Feld label="Kappung je m² BGF" wert={s.max7bProQm} onChange={set("max7bProQm")} suffix="€/m²" />
+                      <div className={"deckung" + (r.degressivMoeglich ? " ok" : "")}>
+                        <span>
+                          {r.degressivMoeglich
+                            ? "Zeitfenster für degressive AfA erfüllt (§ 7 Abs. 5a EStG)"
+                            : "Außerhalb des gesetzlichen Zeitfensters — degressive AfA rechtlich derzeit nicht vorgesehen"}
+                        </span>
+                      </div>
+                      <Schalter label="Degressive AfA § 7 Abs. 5a EStG" wert={s.degressiv} onChange={set("degressiv")}
+                        hinweis="Fester Satz vom jeweiligen Restwert" />
+                      {s.degressiv
+                        ? <Feld label="Degressiver Satz" wert={s.degressivSatz} onChange={set("degressivSatz")} suffix="%" />
+                        : <Feld label="Linearer Satz" wert={s.linearSatz} onChange={set("linearSatz")} suffix="%"
+                            hinweis="3 % für Neubauten ab Fertigstellung 2023, davor 2 %" />}
+                      <Schalter label="Sonderabschreibung § 7b EStG" wert={s.sonder7b} onChange={set("sonder7b")}
+                        hinweis="Zusätzlich in den ersten Jahren, ohne Zeitanteil im Fertigstellungsjahr" />
+                      {s.sonder7b && (
+                        <>
+                          <Feld label="Satz je Jahr" wert={s.sonder7bSatz} onChange={set("sonder7bSatz")} suffix="%" />
+                          <Feld label="Begünstigungszeitraum" wert={s.sonder7bJahre} onChange={set("sonder7bJahre")} suffix="Jahre" />
+                          <Feld label="Kappung je m² BGF" wert={s.max7bProQm} onChange={set("max7bProQm")} suffix="€/m²" />
+                        </>
+                      )}
+                    </>
+                  )}
+
+                  {s.gebaeudeart === "denkmal" && (
+                    <>
+                      <Feld label="Sanierungsanteil am Gebäudewert" wert={s.denkmalSanierungsanteil}
+                        onChange={set("denkmalSanierungsanteil")} suffix="%"
+                        hinweis={`Modernisierung ${eur(r.denkmalModernisierung)} € · Altbausubstanz ${eur(r.denkmalAltbau)} €`} />
+                      <div className="trenner">Modernisierung — § 7h / § 7i EStG</div>
+                      <Feld label="Satz Jahre 1 bis N" wert={s.denkmalSatz1} onChange={set("denkmalSatz1")} suffix="%" />
+                      <Feld label="Anzahl Jahre, Phase 1" wert={s.denkmalJahre1} onChange={set("denkmalJahre1")} suffix="Jahre" />
+                      <Feld label="Satz Folgejahre" wert={s.denkmalSatz2} onChange={set("denkmalSatz2")} suffix="%" />
+                      <Feld label="Anzahl Jahre, Phase 2" wert={s.denkmalJahre2} onChange={set("denkmalJahre2")} suffix="Jahre"
+                        hinweis="Gesetzlicher Regelfall: 8 Jahre 9 %, danach 4 Jahre 7 % — zusammen 100 % über 12 Jahre, volle Jahresbeträge ab dem Jahr der Fertigstellung der Baumaßnahme" />
+                      <div className="trenner">Altbausubstanz — linear</div>
+                      <Feld label="Linearer Satz Altbau" wert={s.denkmalAltbauSatz} onChange={set("denkmalAltbauSatz")} suffix="%"
+                        hinweis="2 % für Gebäude ab Baujahr 1925, 2,5 % für ältere Gebäude — kein Wahlrecht zur degressiven AfA" />
                     </>
                   )}
                 </>
@@ -1238,6 +1605,27 @@ export default function App() {
                   <div className="trenner">Wertentwicklung</div>
                   <Feld label="Wertsteigerung" wert={s.wertSteigerung} onChange={set("wertSteigerung")} suffix="% p. a." />
                   <Feld label="Wertsteigerung ab" wert={s.wertSteigerungAb} onChange={set("wertSteigerungAb")} />
+                </>
+              }
+            />
+
+            <Gruppe
+              titel="Veräußerung"
+              kennung="Exit"
+              offenStd={false}
+              kinder={
+                <>
+                  <Schalter label="Verkauf modellieren" wert={s.veraeusserungAktiv} onChange={set("veraeusserungAktiv")}
+                    hinweis="Zeigt Verkaufserlös, Restschuld-Ablösung und eine mögliche Spekulationssteuer für ein frei wählbares Jahr" />
+                  {s.veraeusserungAktiv && (
+                    <>
+                      <Feld label="Verkauf im Jahr" wert={s.veraeusserungJahr} onChange={set("veraeusserungJahr")}
+                        hinweis="Unabhängig vom Betrachtungsende — auch außerhalb des Zeitraums oben möglich" />
+                      <Feld label="Verkauf im Monat" wert={s.veraeusserungMonat} onChange={set("veraeusserungMonat")} />
+                      <Feld label="Verkaufskosten" wert={s.verkaufskostenSatz} onChange={set("verkaufskostenSatz")} suffix="%"
+                        hinweis="Makler, Vermarktung u. Ä., in % vom Verkaufspreis" />
+                    </>
+                  )}
                 </>
               }
             />
@@ -1277,7 +1665,7 @@ export default function App() {
             <Liquiditaetsband zeilen={r.zeilen.filter((z) => z.jahr >= s.fertigJahr)} />
 
             <nav className="reiter">
-              {[["liquiditaet","Liquidität"],["steuer","Steuerwirkung"],["kosten","Kosten und AfA"],["vermoegen","Vermögen"]]
+              {[["liquiditaet","Liquidität"],["steuer","Steuerwirkung"],["kosten","Kosten und AfA"],["vermoegen","Vermögen"],["veraeusserung","Veräußerung"]]
                 .map(([k, t]) => (
                   <button key={k} className={tab === k ? "aktiv" : ""} onClick={() => setTab(k)}>{t}</button>
                 ))}
@@ -1361,6 +1749,8 @@ export default function App() {
                   Kinderfreibeträge geminderte Bemessungsgrundlage. Bei Tarifanpassung 0 % ergeben
                   sich für das Tarifjahr dieselben Beträge wie im BMF-Steuerrechner. Die
                   Erhaltungsrücklage mindert die Liquidität, aber nicht das steuerliche Ergebnis.
+                  {s.gebaeudeart === "denkmal" &&
+                    " Bei Denkmalimmobilien läuft die AfA nur über § 7h/§ 7i EStG (9 % über 8 Jahre, danach 7 % über 4 Jahre auf die Modernisierungskosten); die Altbausubstanz wird daneben linear abgeschrieben. Degressive AfA und § 7b EStG gelten ausschließlich für Neubauten."}
                 </p>
               </div>
             )}
@@ -1392,13 +1782,24 @@ export default function App() {
                       <div><dt>anteilige Nebenkosten ({pct(r.quote * 100)} %)</dt>
                         <dd>{eur((r.grest + r.notar + r.beratung) * r.quote)} €</dd></div>
                       <div><dt>abzüglich Zuschuss</dt><dd>{eur(s.zuschussBetrag)} €</dd></div>
-                      <div className="stark"><dt>Grundlage {s.degressiv ? "degressive" : "lineare"} AfA</dt>
-                        <dd>{eur(r.bmgDegressiv)} €</dd></div>
-                      {s.sonder7b && (
+                      {s.gebaeudeart === "neubau" ? (
                         <>
-                          <div><dt>Herstellungskosten abzgl. Zuschuss</dt><dd>{eur(r.bmg7bRoh)} €</dd></div>
-                          <div><dt>Kappung {eur(s.max7bProQm)} €/m² × {eur2(s.bgf)} m²</dt><dd>{eur(r.kappung)} €</dd></div>
-                          <div className="stark"><dt>Grundlage § 7b EStG</dt><dd>{eur(r.bmg7b)} €</dd></div>
+                          <div className="stark"><dt>Grundlage {s.degressiv ? "degressive" : "lineare"} AfA</dt>
+                            <dd>{eur(r.bmgDegressiv)} €</dd></div>
+                          {s.sonder7b && (
+                            <>
+                              <div><dt>Herstellungskosten abzgl. Zuschuss</dt><dd>{eur(r.bmg7bRoh)} €</dd></div>
+                              <div><dt>Kappung {eur(s.max7bProQm)} €/m² × {eur2(s.bgf)} m²</dt><dd>{eur(r.kappung)} €</dd></div>
+                              <div className="stark"><dt>Grundlage § 7b EStG</dt><dd>{eur(r.bmg7b)} €</dd></div>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <div className="stark"><dt>Grundlage Modernisierung § 7h/7i</dt>
+                            <dd>{eur(r.denkmalModernisierung)} €</dd></div>
+                          <div className="stark"><dt>Grundlage Altbau, linear</dt>
+                            <dd>{eur(r.denkmalAltbau)} €</dd></div>
                         </>
                       )}
                     </dl>
@@ -1407,8 +1808,10 @@ export default function App() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Jahr</th><th>{s.degressiv ? "Degressive AfA" : "Lineare AfA"}</th>
-                      <th>Sonder-AfA § 7b</th><th>AfA gesamt</th><th>Restschuld</th>
+                      <th>Jahr</th>
+                      <th>{s.gebaeudeart === "denkmal" ? "Altbau linear" : (s.degressiv ? "Degressive AfA" : "Lineare AfA")}</th>
+                      <th>{s.gebaeudeart === "denkmal" ? "Modernisierung § 7h/7i" : "Sonder-AfA § 7b"}</th>
+                      <th>AfA gesamt</th><th>Restschuld</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1439,10 +1842,64 @@ export default function App() {
                 </dl>
                 <p className="fussnote">
                   Interne Verzinsung des eingesetzten Kapitals nach Steuern:{" "}
-                  {r.irr === null ? "nicht bestimmbar" : pct(r.irr) + " %"}. Ein Verkauf innerhalb
-                  von zehn Jahren nach Anschaffung löst nach § 23 EStG einen steuerpflichtigen
-                  Veräußerungsgewinn aus; er ist hier nicht berücksichtigt.
+                  {r.irr === null ? "nicht bestimmbar" : pct(r.irr) + " %"}. Diese Ansicht geht von
+                  einem Halten der Immobilie über den gesamten Betrachtungszeitraum aus. Für einen
+                  Verkauf zu einem frei wählbaren Jahr — inklusive einer möglichen Spekulationssteuer
+                  nach § 23 EStG — siehe den Tab „Veräußerung".
                 </p>
+              </div>
+            )}
+
+            {tab === "veraeusserung" && (
+              <div className="tafel">
+                {!s.veraeusserungAktiv ? (
+                  <p className="leer">
+                    „Verkauf modellieren" ist in der Eingabespalte unter „Veräußerung" ausgeschaltet.
+                    Aktivieren, um Verkaufserlös, Restschuld-Ablösung und eine mögliche
+                    Spekulationssteuer für ein frei wählbares Jahr zu sehen.
+                  </p>
+                ) : (
+                  <>
+                    <dl className="bilanz">
+                      <div><dt>Verkaufspreis im Jahr {r.veraeusserung.jahr}</dt><dd>{eur(r.veraeusserung.verkaufspreis)} €</dd></div>
+                      {s.verkaufskostenSatz > 0 && (
+                        <div><dt>abzüglich Verkaufskosten ({pct(s.verkaufskostenSatz)} %)</dt>
+                          <dd>− {eur(r.veraeusserung.verkaufskosten)} €</dd></div>
+                      )}
+                      <div><dt>abzüglich Restschuld Darlehen</dt><dd>− {eur(r.veraeusserung.restschuld)} €</dd></div>
+                      <div className="stark"><dt>Buchwert (Gesamtkosten abzgl. kumulierter AfA)</dt>
+                        <dd>{eur(r.veraeusserung.buchwert)} €</dd></div>
+                      <div className={r.veraeusserung.gewinn >= 0 ? "" : "stark"}>
+                        <dt>Veräußerungsgewinn</dt>
+                        <dd className={r.veraeusserung.gewinn >= 0 ? "steuer" : "aus"}>{eur(r.veraeusserung.gewinn)} €</dd>
+                      </div>
+                      <div>
+                        <dt>Haltedauer</dt>
+                        <dd>{Math.floor(r.veraeusserung.monateGehalten / 12)} Jahre, {r.veraeusserung.monateGehalten % 12} Monate</dd>
+                      </div>
+                      <div>
+                        <dt>Spekulationsfrist § 23 EStG (10 Jahre)</dt>
+                        <dd>{r.veraeusserung.spekulationspflichtig ? "noch nicht abgelaufen" : "abgelaufen — steuerfrei"}</dd>
+                      </div>
+                      {r.veraeusserung.spekulationspflichtig && (
+                        <div>
+                          <dt>{r.veraeusserung.steuerpflichtig ? "Spekulationssteuer" : "Spekulationssteuer (unter Freigrenze 600 €)"}</dt>
+                          <dd>{r.veraeusserung.steuerpflichtig ? "− " + eur(r.veraeusserung.steuer) + " €" : "0 €"}</dd>
+                        </div>
+                      )}
+                      <div className="stark"><dt>Netto-Verkaufserlös</dt><dd>{eur(r.veraeusserung.nettoerloes)} €</dd></div>
+                    </dl>
+                    <p className="fussnote">
+                      Der Buchwert ergibt sich aus den Gesamtkosten abzüglich der bis zum Verkaufsjahr
+                      tatsächlich in Anspruch genommenen AfA (degressiv/linear, § 7b oder § 7h/7i, je
+                      nach Gebäudeart). Innerhalb von zehn Jahren seit dem Kaufvertrag ist ein Gewinn
+                      von 600 € oder mehr in voller Höhe mit dem persönlichen Grenzsteuersatz im
+                      Verkaufsjahr zu versteuern (Freigrenze, kein Freibetrag); nach Ablauf der Frist
+                      ist der Gewinn steuerfrei. Maklerprovisionen des Käufers und Details der
+                      Anschlussfinanzierung ab Verkaufsjahr sind nicht berücksichtigt.
+                    </p>
+                  </>
+                )}
               </div>
             )}
 
@@ -1463,26 +1920,26 @@ const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 .app {
-  --bg: #0A1017;
-  --karte: #121C26;
-  --karte-2: #16212D;
-  --sunk: #0E1720;
-  --line: #22303D;
-  --text: #E9F0F4;
-  --muted: #8397A6;
-  --akzent: #4FE0B0;
-  --akzent-weich: rgba(79,224,176,.14);
-  --aus: #FF9270;
-  --steuer: #F5C86E;
-  --steuer-weich: rgba(245,200,110,.32);
-  --eigen: rgba(79,224,176,.18);
-  --schatten: 0 24px 60px -34px rgba(0,0,0,.9);
+  --bg: #10151B;
+  --karte: #181F27;
+  --karte-2: #1C242C;
+  --sunk: #12181F;
+  --line: #2A333C;
+  --text: #ECEAE4;
+  --muted: #8B9089;
+  --akzent: #3E8F65;
+  --akzent-weich: rgba(62,143,101,.16);
+  --aus: #C97A54;
+  --steuer: #D2AD5C;
+  --steuer-weich: rgba(210,173,92,.28);
+  --eigen: rgba(62,143,101,.20);
+  --schatten: 0 24px 60px -34px rgba(0,0,0,.85);
   --font-d: 'Space Grotesk', 'Segoe UI', sans-serif;
   --font-b: 'IBM Plex Sans', system-ui, sans-serif;
   --font-m: 'IBM Plex Mono', ui-monospace, monospace;
   background:
-    radial-gradient(1100px 520px at 12% -10%, rgba(79,224,176,.10), transparent 60%),
-    radial-gradient(900px 460px at 92% 4%, rgba(120,150,255,.10), transparent 62%),
+    radial-gradient(1100px 520px at 12% -10%, rgba(62,143,101,.10), transparent 60%),
+    radial-gradient(900px 460px at 92% 4%, rgba(139,144,137,.08), transparent 62%),
     var(--bg);
   color: var(--text);
   font-family: var(--font-b);
@@ -1490,27 +1947,27 @@ const CSS = `
   -webkit-font-smoothing: antialiased;
 }
 .app.hell {
-  --bg: #F3F5F8;
-  --karte: #FFFFFF;
-  --karte-2: #FFFFFF;
-  --sunk: #F2F5F8;
-  --line: #E2E8EE;
-  --text: #101A24;
-  --muted: #6B7C8B;
-  --akzent: #0E9B78;
-  --akzent-weich: rgba(14,155,120,.10);
-  --aus: #C25334;
-  --steuer: #B98A28;
-  --steuer-weich: rgba(185,138,40,.26);
-  --eigen: rgba(14,155,120,.14);
-  --schatten: 0 18px 40px -30px rgba(16,26,36,.55);
+  --bg: #E7E4DE;
+  --karte: #F7F5F1;
+  --karte-2: #F1EEE8;
+  --sunk: #EFECE5;
+  --line: #D9D5CB;
+  --text: #22251F;
+  --muted: #71705F;
+  --akzent: #0F5132;
+  --akzent-weich: rgba(15,81,50,.10);
+  --aus: #A6552F;
+  --steuer: #9C7A24;
+  --steuer-weich: rgba(156,122,36,.22);
+  --eigen: rgba(15,81,50,.14);
+  --schatten: 0 18px 40px -30px rgba(34,37,31,.30);
   background:
-    radial-gradient(900px 460px at 10% -12%, rgba(14,155,120,.10), transparent 60%),
+    radial-gradient(900px 460px at 10% -12%, rgba(15,81,50,.08), transparent 60%),
     var(--bg);
 }
 .app * { box-sizing: border-box; }
 .app ::placeholder { color: var(--muted); opacity: .65; }
-.app ::selection { background: var(--akzent); color: #06121B; }
+.app ::selection { background: var(--akzent); color: #F7F5F1; }
 
 .huelle { max-width: 1420px; margin: 0 auto; padding: 0 24px 56px; }
 @media (max-width: 960px) { .huelle { padding: 0 14px 40px; } }
@@ -1574,7 +2031,7 @@ const CSS = `
   border: 1px solid var(--line); color: var(--muted);
   font-family: var(--font-m); font-size: 14px; line-height: 21px; text-align: center;
 }
-.gruppe.offen .pfeil { background: var(--akzent); border-color: var(--akzent); color: #06121B; }
+.gruppe.offen .pfeil { background: var(--akzent); border-color: var(--akzent); color: #F5F3EE; }
 .gruppe-inhalt { padding: 0 0 22px; display: grid; gap: 15px; }
 
 .feld { display: grid; gap: 6px; }
@@ -1601,7 +2058,7 @@ const CSS = `
   font-family: var(--font-b); font-size: 13px; padding: 8px 10px; border-radius: 8px;
   transition: all .16s ease;
 }
-.segment button.aktiv { background: var(--akzent); color: #06121B; font-weight: 600; }
+.segment button.aktiv { background: var(--akzent); color: #F5F3EE; font-weight: 600; }
 
 .schalter {
   display: flex; gap: 11px; align-items: flex-start; font-size: 13px; cursor: pointer;
@@ -1661,10 +2118,10 @@ const CSS = `
   padding: 18px 19px; display: grid; gap: 6px; align-content: start; box-shadow: var(--schatten);
 }
 .kz.betont {
-  background: linear-gradient(155deg, var(--akzent) 0%, #1FB790 55%, #0F8F72 100%);
-  border-color: transparent; color: #05131B;
+  background: linear-gradient(155deg, var(--akzent) 0%, #164B32 60%, #0D3322 100%);
+  border-color: transparent; color: #F5F3EE;
 }
-.kz.betont .kz-label, .kz.betont .kz-fuss { color: rgba(5,19,27,.72); }
+.kz.betont .kz-label, .kz.betont .kz-fuss { color: rgba(245,243,238,.72); }
 .kz-label { font-size: 11.5px; color: var(--muted); }
 .kz-wert { font-family: var(--font-d); font-weight: 600; font-size: clamp(20px, 2.4vw, 27px); letter-spacing: -.025em; }
 .kz-wert.aus { color: var(--aus); }
@@ -1701,13 +2158,13 @@ const CSS = `
   padding: 10px 18px; border-radius: 999px; cursor: pointer; transition: all .16s ease;
 }
 .reiter button:hover { color: var(--text); background: var(--sunk); }
-.reiter button.aktiv { background: var(--akzent); color: #06121B; font-weight: 600; }
+.reiter button.aktiv { background: var(--akzent); color: #F5F3EE; font-weight: 600; }
 .export { margin-left: auto; display: flex; gap: 6px; }
 .reiter .pdf {
   font-family: var(--font-m); font-size: 11.5px; background: var(--akzent);
-  color: #06121B; font-weight: 600;
+  color: #F5F3EE; font-weight: 600;
 }
-.reiter .pdf:hover { background: var(--akzent); color: #06121B; filter: brightness(1.08); }
+.reiter .pdf:hover { background: var(--akzent); color: #F5F3EE; filter: brightness(1.08); }
 .deckung {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   font-size: 11.5px; color: var(--aus); background: var(--sunk);
@@ -1715,6 +2172,21 @@ const CSS = `
 }
 .deckung.ok { color: var(--akzent); }
 .reiter .csv { margin-left: 0; font-family: var(--font-m); font-size: 11.5px; border: 1px solid var(--line); }
+
+.vorlagen { display: grid; gap: 8px; }
+.vorlage {
+  text-align: left; display: grid; gap: 3px; background: var(--sunk);
+  border: 1px solid var(--line); border-radius: 11px; padding: 10px 12px; cursor: pointer;
+  transition: border-color .16s ease;
+}
+.vorlage:hover { border-color: var(--akzent); }
+.vorlage-titel { font-family: var(--font-b); font-size: 12px; font-weight: 600; color: var(--text); }
+.vorlage-hinweis { font-size: 11px; color: var(--muted); line-height: 1.4; }
+.vorlagen-gruppe { display: grid; gap: 6px; margin-bottom: 4px; }
+.vorlagen-kategorie {
+  font-family: var(--font-m); font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--muted);
+}
 
 /* Tafeln */
 .tafel { border-radius: 22px; overflow-x: auto; overflow-y: hidden; }
