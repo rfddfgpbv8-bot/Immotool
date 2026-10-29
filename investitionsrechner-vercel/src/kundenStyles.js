@@ -18,6 +18,8 @@ export const KUNDEN_CSS = `
   --akzent: #867050;         /* Khaki der Website */
   --akzent-dunkel: #6B5A3F;
   --pos: #3F6B57;
+  --balken-zahlen: #867050;   /* Sie zahlen dazu: Khaki */
+  --balken-uebrig: #4A3B6B;   /* Es bleibt übrig: Violett */
   --rost: #9B4B2A;
   --rost-weich: rgba(155,75,42,.10);
   --fokus: #1D152A;
@@ -40,6 +42,8 @@ export const KUNDEN_CSS = `
   --akzent: #B8A27C;
   --akzent-dunkel: #B8A27C;
   --pos: #8FB9A2;
+  --balken-zahlen: #B8A27C;
+  --balken-uebrig: #E4E88A;
   --rost: #E0956C;
   --rost-weich: rgba(224,149,108,.14);
   --fokus: #F8FE76;
@@ -302,54 +306,69 @@ export const KUNDEN_CSS = `
 /* ---------- Feinschliff: ruhiger, hochwertiger ---------- */
 @keyframes rein { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
-/* Navigation: dunkel, geht nahtlos in den Hero über */
-.jb .nav { background: rgba(29,21,42,.94); border-bottom: 1px solid rgba(255,255,255,.08); color: #F4F2EE; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
-.jb .nav .logo-hell { display: none !important; }
-.jb .nav .logo-dunkel, .jb[data-theme="dunkel"] .nav .logo-dunkel { display: block !important; }
-.jb .nav-links a { font-weight: 500; letter-spacing: .01em; font-size: 15.5px; color: #C7C0D2; }
-.jb .nav-links a:hover { color: #fff; }
+/* Navigation: hell, klar */
+.jb .nav { background: color-mix(in srgb, var(--bg) 92%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.jb .nav-links a { font-weight: 500; letter-spacing: .01em; font-size: 15.5px; }
 
-/* Hero: dunkel mit weichem Lichtverlauf, Gelb nur als feiner Akzent */
-.jb .hero, .jb .nav {
-  --tinte: #F4F2EE; --gedaempft: #C7C0D2;
-  --linie: rgba(255,255,255,.14); --linie-stark: rgba(255,255,255,.32);
-  --gruen: var(--gelb); --gruen-hell: var(--gelb-hell); --gruen-auf: #1D152A; --gruen-weich: rgba(248,254,118,.10);
-  --akzent: #C9B48C; --akzent-dunkel: #C9B48C; --fokus: var(--gelb);
-}
+/* Hero: hell und freundlich, die Rechenkarte setzt den dunklen Akzent */
 .jb .hero {
-  color: #F4F2EE;
   background:
-    radial-gradient(60% 80% at 90% 0%, rgba(134,112,80,.34), transparent 62%),
-    radial-gradient(55% 70% at 0% 100%, rgba(78,54,116,.50), transparent 66%),
-    #1D152A;
-  padding: clamp(64px, 9vw, 128px) 0 clamp(72px, 10vw, 140px);
-  border-bottom: 1px solid rgba(255,255,255,.08);
+    radial-gradient(50% 70% at 94% 0%, rgba(248,254,118,.30), transparent 62%),
+    radial-gradient(45% 60% at 0% 100%, rgba(134,112,80,.10), transparent 68%),
+    linear-gradient(180deg, #FBFAF7, #FFFFFF);
+  padding: clamp(56px, 8vw, 108px) 0 clamp(64px, 9vw, 120px);
+  border-bottom: 1px solid var(--linie);
 }
-.jb .eyebrow { display: inline-flex; align-items: center; gap: 14px; background: none; padding: 0; border-radius: 0; margin: 0 0 28px; font-size: 12.5px; letter-spacing: .22em; color: var(--akzent-dunkel); }
-.jb .eyebrow::before { content: ""; width: 34px; height: 2px; background: var(--gelb); }
+.jb[data-theme="dunkel"] .hero {
+  background:
+    radial-gradient(60% 80% at 90% 0%, rgba(134,112,80,.30), transparent 62%),
+    radial-gradient(55% 70% at 0% 100%, rgba(78,54,116,.45), transparent 66%),
+    #1D152A;
+  border-bottom-color: rgba(255,255,255,.08);
+}
+.jb .eyebrow { display: inline-flex; align-items: center; gap: 14px; background: none; padding: 0; border-radius: 0; margin: 0 0 26px; font-size: 12.5px; letter-spacing: .22em; color: var(--akzent-dunkel); }
+.jb .eyebrow::before { content: ""; width: 34px; height: 2px; background: var(--akzent); }
+.jb[data-theme="dunkel"] .eyebrow::before { background: var(--gelb); }
 .jb .hero h1 { font-weight: 600; font-size: clamp(40px, 5.4vw, 78px); line-height: 1; letter-spacing: -.012em; max-width: 15ch; }
 .jb .hero h1 .leicht,
-.jb[data-theme="dunkel"] .hero h1 .leicht { display: block; background: none; padding: 0; margin: 0; font-weight: 300; color: #C9B48C; }
-.jb .hero-text { font-size: 19px; line-height: 1.55; margin-top: 28px; }
-.jb .hero-aktionen { margin-top: 38px; }
-.jb .hero-punkte { margin-top: 44px; color: #DAD4E3; }
-.jb .hero-punkte li::before { background: var(--gelb); }
+.jb[data-theme="dunkel"] .hero h1 .leicht { display: block; background: none; padding: 0; margin: 0; font-weight: 300; color: var(--akzent); }
+.jb .hero-text { font-size: 19px; line-height: 1.55; margin-top: 26px; }
+.jb .hero-aktionen { margin-top: 36px; }
+.jb .hero-punkte { margin-top: 40px; }
+.jb .hero-punkte li::before { background: var(--akzent); }
 @media (prefers-reduced-motion: no-preference) {
   .jb .hero-raster > * { animation: rein .9s cubic-bezier(.2,.7,.2,1) both; }
   .jb .hero-raster > *:nth-child(2) { animation-delay: .14s; }
 }
 
-/* Rechenkarte im Hero: Glas auf dunklem Grund */
-.jb .blatt { background: linear-gradient(160deg, rgba(255,255,255,.10), rgba(255,255,255,.03)); border: 1px solid rgba(255,255,255,.18); border-radius: 20px; box-shadow: 0 40px 90px -50px rgba(0,0,0,.7); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+/* Rechenkarte im Hero: dunkel, damit das Ergebnis im Mittelpunkt steht */
+.jb .blatt {
+  --tinte: #F4F2EE; --gedaempft: #C7C0D2; --linie: rgba(255,255,255,.14);
+  color: #F4F2EE;
+  background: radial-gradient(120% 140% at 100% 0%, rgba(134,112,80,.42), transparent 56%), #1D152A;
+  border: 1px solid #1D152A; border-radius: 20px;
+  box-shadow: 0 40px 80px -44px rgba(29,21,42,.6);
+}
+.jb[data-theme="dunkel"] .blatt { border-color: rgba(255,255,255,.18); }
 .jb .blatt-kopf strong { color: #fff; }
 .jb .blatt-kopf span:last-child { background: none; border: 1px solid rgba(248,254,118,.55); color: var(--gelb); padding: 2px 12px; border-radius: 999px; font-weight: 600; font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; align-self: center; }
 .jb .blatt-gross, .jb .blatt-gross.minus { color: var(--gelb); font-weight: 600; }
 .jb .blatt-zeilen dd { color: #fff; }
 
+/* Vertrauensleiste */
+.jb .vertrauen { background: var(--bg); border-bottom: 1px solid var(--linie); }
+.jb .vertrauen-raster { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(20px, 3vw, 44px); padding: clamp(28px, 4vw, 44px) 0; }
+@media (max-width: 860px) { .jb .vertrauen-raster { grid-template-columns: 1fr; gap: 22px; } }
+.jb .vertrauen-punkt { display: grid; grid-template-columns: 44px 1fr; gap: 16px; align-items: start; }
+.jb .vertrauen-icon { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--gelb); color: #1D152A; }
+.jb .vertrauen-icon svg { width: 22px; height: 22px; }
+.jb .vertrauen-punkt strong { display: block; font-family: 'Barlow Semi Condensed', sans-serif; font-size: 19px; font-weight: 600; margin-bottom: 4px; }
+.jb .vertrauen-punkt span { color: var(--gedaempft); font-size: 15px; line-height: 1.5; }
+
 /* Beispielwerte-Band: schmal und ruhig */
-.jb .band-hinweis { background: #140F1D; color: #DAD4E3; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 13px; letter-spacing: .01em; }
+.jb .band-hinweis { background: var(--papier); color: var(--gedaempft); border-bottom: 1px solid var(--linie); font-size: 13px; letter-spacing: .01em; }
 .jb .band-hinweis .huelle { display: flex; align-items: center; gap: 12px; }
-.jb .band-hinweis .huelle::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--gelb); }
+.jb .band-hinweis .huelle::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--gelb); box-shadow: 0 0 0 1px rgba(29,21,42,.25); }
 
 /* Abschnittsköpfe */
 .jb .sektion-kopf h2, .jb .anfrage-text h2 { font-weight: 600; letter-spacing: -.01em; }
@@ -380,7 +399,6 @@ export const KUNDEN_CSS = `
 .jb .knopf { min-height: 48px; padding: 0 28px; letter-spacing: .03em; transition: background-color .15s, border-color .15s, box-shadow .2s, transform .2s; }
 .jb .knopf.klein { min-height: 38px; padding: 0 16px; }
 .jb .knopf:not(.leise):not(:disabled):hover { box-shadow: 0 0 0 3px var(--gelb); transform: translateY(-1px); }
-.jb .hero .knopf:not(.leise):hover { box-shadow: 0 0 0 4px rgba(248,254,118,.28); }
 
 /* Kennzahlen */
 .jb .kz-wert { font-weight: 600; }
@@ -396,4 +414,29 @@ export const KUNDEN_CSS = `
 .jb .fuss a:hover { color: var(--gelb); }
 .jb[data-theme="dunkel"] .knopf.leise { color: var(--tinte); }
 .jb[data-theme="dunkel"] .knopf.leise:hover { background: var(--gruen-weich); border-color: var(--gelb); }
+
+/* Nummerierte Schritte im Rechner */
+.jb .eingaben { counter-reset: k; }
+.jb .kasten > h3 { counter-increment: k; display: flex; align-items: center; gap: 12px; }
+.jb .kasten > h3::before { content: counter(k); flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--gelb); color: #1D152A; font-size: 14px; font-weight: 700; }
+
+/* Zusammenfassung in Klartext */
+.jb .zusammenfassung { background: var(--platte); border: 1px solid var(--linie); border-left: 3px solid var(--akzent); border-radius: 0 14px 14px 0; padding: 16px 20px; font-size: 16px; line-height: 1.6; }
+.jb .zusammenfassung strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Zusagen am Formular */
+.jb .zusagen { list-style: none; margin: 26px 0 0; padding: 0; display: grid; gap: 12px; font-size: 15.5px; }
+.jb .zusagen li { display: flex; gap: 12px; align-items: center; }
+.jb .zusagen li::before { content: ""; flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--gelb) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path d='M5.5 10.5l3 3 6-7' fill='none' stroke='%231D152A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/20px no-repeat; }
+
+/* Ergebnisleiste, nur auf dem Handy */
+.jb .leiste-mobil { display: none; }
+@media (max-width: 960px) {
+  .jb .leiste-mobil { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 10px 10px 18px; border-radius: 999px; background: #1D152A; color: #F4F2EE; box-shadow: 0 16px 40px -12px rgba(0,0,0,.45); transform: translateY(140%); opacity: 0; transition: transform .3s, opacity .3s; pointer-events: none; }
+  .jb .leiste-mobil.sichtbar { transform: none; opacity: 1; pointer-events: auto; }
+  .jb .leiste-mobil .l-label { display: block; font-size: 12px; color: #C7C0D2; line-height: 1.2; }
+  .jb .leiste-mobil .l-wert { display: block; font-family: 'Barlow Semi Condensed', sans-serif; font-weight: 600; font-size: 22px; color: var(--gelb); line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .jb .leiste-mobil .knopf { min-height: 40px; padding: 0 18px; font-size: 15px; background: var(--gelb); border-color: var(--gelb); color: #1D152A; }
+  .jb { padding-bottom: 0; }
+}
 `;

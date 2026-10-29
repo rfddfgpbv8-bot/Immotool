@@ -104,7 +104,7 @@ function Monatsdiagramm({ zeilen }) {
           return (
             <g key={z.jahr}>
               <rect x={x} y={Math.min(y1, yNull)} width={balken} height={Math.max(1, Math.abs(y1 - yNull))}
-                fill={w > 0 ? "var(--rost)" : "var(--pos)"}>
+                rx="2" fill={w > 0 ? "var(--balken-zahlen)" : "var(--balken-uebrig)"}>
                 <title>{z.jahr}: {w > 0 ? "zahlen Sie " : "bleiben "}{euro(Math.abs(w))} pro Monat</title>
               </rect>
               <text x={x + balken / 2} y={H - 8} textAnchor="middle">{String(z.jahr).slice(2)}</text>
@@ -114,12 +114,27 @@ function Monatsdiagramm({ zeilen }) {
         <line x1={links} x2={B} y1={yNull} y2={yNull} stroke="var(--linie-stark)" strokeWidth="1" />
       </svg>
       <div className="legende">
-        <span><i style={{ background: "var(--rost)" }} />Sie zahlen dazu</span>
-        <span><i style={{ background: "var(--pos)" }} />Es bleibt etwas übrig</span>
+        <span><i style={{ background: "var(--balken-zahlen)" }} />Sie zahlen dazu</span>
+        <span><i style={{ background: "var(--balken-uebrig)" }} />Es bleibt etwas übrig</span>
       </div>
     </figure>
   );
 }
+
+/* ---------- Symbole für die Vertrauensleiste ---------- */
+
+const Symbol = ({ name }) => {
+  const pfade = {
+    schild: <><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z" /><path d="M9 12l2.2 2.2L15.5 10" /></>,
+    liste: <><path d="M8 7h11M8 12h11M8 17h11" /><path d="M4 7h.01M4 12h.01M4 17h.01" /></>,
+    schloss: <><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 018 0v3" /></>,
+  };
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {pfade[name]}
+    </svg>
+  );
+};
 
 /* ---------- Seite ---------- */
 
@@ -145,6 +160,22 @@ export default function KundenApp() {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   };
+
+  /* ---- feste Ergebnisleiste auf dem Handy ---- */
+  const [leiste, setLeiste] = useState(false);
+  useEffect(() => {
+    const rechnerEl = document.getElementById("rechner");
+    const ergebnisEl = document.getElementById("ergebnis");
+    if (!rechnerEl || !ergebnisEl || !("IntersectionObserver" in window)) return;
+    const zustand = { rechner: false, ergebnis: false };
+    const aktualisieren = () => setLeiste(zustand.rechner && !zustand.ergebnis);
+    const io = new IntersectionObserver((eintraege) => {
+      eintraege.forEach((x) => { zustand[x.target.id] = x.isIntersecting; });
+      aktualisieren();
+    }, { threshold: 0.05 });
+    io.observe(rechnerEl); io.observe(ergebnisEl);
+    return () => io.disconnect();
+  }, []);
 
   /* ---- Anmeldung (Kundenzugang) ---- */
   const [session, setSession] = useState(null);
@@ -346,6 +377,24 @@ export default function KundenApp() {
           </div>
         </section>
 
+        {/* ---------- Vertrauen ---------- */}
+        <section className="vertrauen" aria-label="Darauf können Sie sich verlassen">
+          <div className="huelle vertrauen-raster">
+            <div className="vertrauen-punkt">
+              <span className="vertrauen-icon"><Symbol name="schild" /></span>
+              <div><strong>Amtlicher Steuertarif</strong><span>Die Steuerwirkung folgt dem Einkommensteuertarif nach § 32a EStG, mit Solidaritätszuschlag.</span></div>
+            </div>
+            <div className="vertrauen-punkt">
+              <span className="vertrauen-icon"><Symbol name="liste" /></span>
+              <div><strong>Jede Zahl nachvollziehbar</strong><span>Kosten, Zinsen, Abschreibung und Steuer sehen Sie Jahr für Jahr aufgeschlüsselt.</span></div>
+            </div>
+            <div className="vertrauen-punkt">
+              <span className="vertrauen-icon"><Symbol name="schloss" /></span>
+              <div><strong>Diskret und unverbindlich</strong><span>Ihre Eingaben bleiben in Ihrem Browser, bis Sie selbst eine Anfrage senden.</span></div>
+            </div>
+          </div>
+        </section>
+
         {/* ---------- Projekte ---------- */}
         <section className="sektion" id="projekte">
           <div className="huelle">
@@ -508,7 +557,7 @@ export default function KundenApp() {
                 )}
               </div>
 
-              <div className="ergebnis" aria-live="polite">
+              <div className="ergebnis" id="ergebnis" aria-live="polite">
                 <div className="kennzahlen">
                   <div className="kz hervor">
                     <span className="kz-label">Ø monatlich nach Steuern, ab Vermietung</span>
@@ -536,6 +585,16 @@ export default function KundenApp() {
                     <span className="kz-sub">nach Steuern, interner Zinsfuß</span>
                   </div>
                 </div>
+
+                <p className="zusammenfassung">
+                  {Math.round(r.aufwandPM) === 0
+                    ? <>Bei Ihren Angaben ist die Wohnung ab Vermietung im Durchschnitt <strong>ausgeglichen</strong> (nach Steuern). </>
+                    : pmErg.minus
+                      ? <>Bei Ihren Angaben kostet Sie die Wohnung ab Vermietung im Durchschnitt <strong>{pmErg.text} pro Monat</strong> (nach Steuern). </>
+                      : <>Bei Ihren Angaben bleiben ab Vermietung im Durchschnitt <strong>{pmErg.text} pro Monat</strong> übrig (nach Steuern). </>}
+                  Verkaufen Sie {s.veraeusserungJahr}, ergibt sich nach Abzug aller Kosten und Steuern {vermoegen >= 0 ? "ein Vermögenszuwachs von " : "ein Minus von "}
+                  <strong>{euro(Math.abs(vermoegen))}</strong> bei einem Einsatz von {euro(r.eigenkapital)} Eigenkapital.
+                </p>
 
                 <Monatsdiagramm zeilen={zeilenAnzeige} />
 
@@ -672,6 +731,11 @@ export default function KundenApp() {
             <div className="anfrage-text">
               <h2>Unverbindlich anfragen</h2>
               <p>Senden Sie uns Ihre Berechnung oder stellen Sie eine Frage. Wir melden uns persönlich bei Ihnen.</p>
+              <ul className="zusagen">
+                <li>Unverbindlich und ohne Verpflichtung</li>
+                <li>Persönliche Antwort statt Standardmail</li>
+                <li>Ihre Angaben nur für diese Anfrage</li>
+              </ul>
               <p className="kontakt">Oder schreiben Sie direkt an <a href={"mailto:" + MARKE.mail}>{MARKE.mail}</a>.</p>
             </div>
 
@@ -741,6 +805,14 @@ export default function KundenApp() {
           </div>
         </section>
       </main>
+
+      <div className={"leiste-mobil" + (leiste ? " sichtbar" : "")} aria-hidden={!leiste}>
+        <span>
+          <span className="l-label">{pmErg.minus ? "Ø monatlich zahlen Sie" : "Ø monatlich bleibt übrig"}</span>
+          <span className="l-wert">{pmErg.text}</span>
+        </span>
+        <button className="knopf" type="button" tabIndex={leiste ? 0 : -1} onClick={() => springe("ergebnis")}>Ergebnis ansehen</button>
+      </div>
 
       <footer className="fuss">
         <div className="huelle fuss-innen">
