@@ -1,36 +1,24 @@
 # Investitionsrechner
 
-Rechner für vermietete Eigentumswohnungen: Liquidität, Steuerwirkung nach § 32a EStG
-(Tarif 2025/2026, Soli mit Freigrenze und Milderungszone, Kirchensteuer),
-degressive AfA und Sonderabschreibung § 7b, Vermögensbetrachtung, CSV- und PDF-Export.
+Kundenseite (`/`) mit Landingpage, Projekten, vereinfachtem Rechner und Anfrageformular.
+Teamansicht (`/team`) mit dem vollständigen Rechner, den Kundenanfragen und gespeicherten Berechnungen.
 
-## Lokal starten
+## Aufbau
 
-```bash
-npm install
-npm run dev
-```
+| Datei | Inhalt |
+|---|---|
+| `src/rechenkern.js` | Steuer (§ 32a EStG), AfA, Finanzierung, Veräußerung |
+| `src/projekte.js` | Projekte, Wohnungen (aktuell Platzhalter), Umrechnung Kundeneingaben → Rechenzustand |
+| `src/vorlagen.js` | KfW-Programme und Startwerte |
+| `src/KundenApp.jsx` | Landingpage und Kundenrechner |
+| `src/TeamApp.jsx` | Teamansicht (Login, Anfragen, Expertenrechner) |
+| `api/anfrage.js` | Vercel-Funktion: speichert Anfragen und sendet die Mail |
+| `supabase/setup.sql` | Tabellen und Zugriffsregeln |
 
-## Auf Vercel veröffentlichen
+## Vor dem öffentlichen Start
 
-1. Dieses Verzeichnis in ein GitHub-Repository legen (siehe unten).
-2. Auf vercel.com: **Add New… → Project → Import Git Repository**.
-3. Vercel erkennt Vite automatisch: Build `npm run build`, Output `dist`.
-4. **Deploy** drücken.
-
-Jeder Push auf `main` löst danach ein neues Deployment aus.
-
-### Per Kommandozeile zu GitHub
-
-```bash
-git init
-git add .
-git commit -m "Investitionsrechner"
-git branch -M main
-git remote add origin https://github.com/<konto>/<repo>.git
-git push -u origin main
-```
-
-## Hinweis
-
-Unverbindliche Modellrechnung, keine Steuerberatung.
+1. In `src/projekte.js` echte Preise, Flächen, Mieten, Standort, Grunderwerbsteuer und Beratungsgebühr eintragen, dann `PLATZHALTER_AKTIV = false` setzen.
+2. Impressum und Datenschutz in `src/KundenApp.jsx` (ganz unten) ausfüllen.
+3. Supabase einrichten: `supabase/setup.sql` im SQL Editor ausführen, Teamkonten anlegen und Rolle vergeben (steht im Skript).
+4. Resend: Konto anlegen, Domain `jacobus-grundbesitz.de` verifizieren, API-Schlüssel erzeugen.
+5. In Vercel unter Settings → Environment Variables alle Werte aus `.env.example` eintragen, danach „Redeploy“.
