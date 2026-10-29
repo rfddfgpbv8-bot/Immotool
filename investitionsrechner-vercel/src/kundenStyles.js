@@ -1,4 +1,4 @@
-/* Gestaltung der Kundenseite: Hellbetongrau und Porsche-Grün */
+/* Gestaltung der Kundenseite: Violett, Khaki und Gelb der Jacobus-Website */
 
 export const KUNDEN_CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@300;400;600;700&family=Barlow:wght@400;500;600&display=swap');
@@ -15,6 +15,8 @@ export const KUNDEN_CSS = `
   --gruen-hell: #3A2D52;
   --gruen-auf: #FFFFFF;
   --gruen-weich: rgba(29,21,42,.06);
+  --gelb: #F8FE76;           /* Gelb der Website, immer mit dunkler Schrift */
+  --gelb-hell: #FCFFB5;
   --akzent: #867050;         /* Khaki der Website */
   --akzent-dunkel: #6B5A3F;
   --pos: #3F6B57;
@@ -33,16 +35,16 @@ export const KUNDEN_CSS = `
   --gedaempft: #BAC2C5;
   --linie: #3A3049;
   --linie-stark: #4D4260;
-  --gruen: #F4F2EE;
-  --gruen-hell: #FFFFFF;
+  --gruen: #F8FE76;
+  --gruen-hell: #FCFFB5;
   --gruen-auf: #1D152A;
-  --gruen-weich: rgba(244,242,238,.08);
+  --gruen-weich: rgba(248,254,118,.10);
   --akzent: #B8A27C;
   --akzent-dunkel: #B8A27C;
   --pos: #8FB9A2;
   --rost: #E0956C;
   --rost-weich: rgba(224,149,108,.14);
-  --fokus: #F4F2EE;
+  --fokus: #F8FE76;
   --fuss-bg: #0F0B16;
   --korn-deckkraft: 0;
   color-scheme: dark;
@@ -298,4 +300,18 @@ export const KUNDEN_CSS = `
 .jb .gespeichert-liste .knoepfe { display: flex; gap: 6px; flex: none; }
 
 @media (prefers-reduced-motion: reduce) { .jb * { transition: none !important; animation: none !important; } }
+
+/* ---------- Gelb-Akzente (wie auf der Website) ---------- */
+.jb .eyebrow { display: inline-block; background: var(--gelb); color: #1D152A; padding: 5px 14px; border-radius: 999px; letter-spacing: .14em; margin-bottom: 20px; }
+.jb .hero h1 .leicht { display: inline; padding: 0 .1em; margin-left: -.1em; background: linear-gradient(transparent 60%, var(--gelb) 60%); -webkit-box-decoration-break: clone; box-decoration-break: clone; color: var(--akzent-dunkel); }
+.jb[data-theme="dunkel"] .hero h1 .leicht { background: none; color: var(--gelb); }
+.jb .blatt-kopf span:last-child { background: var(--gelb); color: #1D152A; padding: 2px 12px; border-radius: 999px; font-weight: 600; font-size: 13px; align-self: center; }
+.jb .marke-tag { background: var(--gelb); border-color: var(--gelb); color: #1D152A; }
+.jb .kz.hervor .kz-wert, .jb .kz.hervor .minus,
+.jb[data-theme="dunkel"] .kz.hervor .minus { color: var(--gelb); }
+.jb .band-hinweis { background: var(--gelb); color: #1D152A; border-bottom: 0; }
+.jb .hero-punkte li::before { background: var(--akzent); }
+.jb .fuss a:hover { color: var(--gelb); }
+.jb[data-theme="dunkel"] .knopf.leise { color: var(--tinte); }
+.jb[data-theme="dunkel"] .knopf.leise:hover { background: var(--gruen-weich); border-color: var(--gelb); }
 `;
