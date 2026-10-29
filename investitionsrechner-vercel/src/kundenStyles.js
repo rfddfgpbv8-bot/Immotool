@@ -1,8 +1,6 @@
 /* Gestaltung der Kundenseite: Violett, Khaki und Gelb der Jacobus-Website */
 
 export const KUNDEN_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@300;400;600;700&family=Barlow:wght@400;500;600&display=swap');
-
 .jb {
   --bg: #FFFFFF;
   --papier: #F4F2EE;
@@ -154,7 +152,7 @@ export const KUNDEN_CSS = `
 .jb .projekte { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 @media (max-width: 860px) { .jb .projekte { grid-template-columns: 1fr; } }
 .jb .projekt { background: var(--platte); border: 1px solid var(--linie); border-radius: 18px; padding: clamp(22px, 3vw, 32px); display: flex; flex-direction: column; gap: 18px; }
-.jb .projekt.aktiv { outline: 2px solid var(--gruen); outline-offset: -2px; }
+.jb .projekt.aktiv { outline: 0; border-color: var(--akzent); box-shadow: 0 0 0 1px var(--akzent); }
 .jb .projekt h3 { font-size: clamp(28px, 3.6vw, 40px); }
 .jb .projekt-adresse { color: var(--gedaempft); font-size: 15px; margin-top: 4px; }
 .jb .marke-tag { display: inline-block; border: 1px solid var(--akzent); color: var(--akzent-dunkel); padding: 2px 12px; font-size: 14px; font-weight: 600; border-radius: 999px; }
@@ -301,16 +299,100 @@ export const KUNDEN_CSS = `
 
 @media (prefers-reduced-motion: reduce) { .jb * { transition: none !important; animation: none !important; } }
 
-/* ---------- Gelb-Akzente (wie auf der Website) ---------- */
-.jb .eyebrow { display: inline-block; background: var(--gelb); color: #1D152A; padding: 5px 14px; border-radius: 999px; letter-spacing: .14em; margin-bottom: 20px; }
-.jb .hero h1 .leicht { display: inline; padding: 0 .1em; margin-left: -.1em; background: linear-gradient(transparent 60%, var(--gelb) 60%); -webkit-box-decoration-break: clone; box-decoration-break: clone; color: var(--akzent-dunkel); }
-.jb[data-theme="dunkel"] .hero h1 .leicht { background: none; color: var(--gelb); }
-.jb .blatt-kopf span:last-child { background: var(--gelb); color: #1D152A; padding: 2px 12px; border-radius: 999px; font-weight: 600; font-size: 13px; align-self: center; }
-.jb .marke-tag { background: var(--gelb); border-color: var(--gelb); color: #1D152A; }
-.jb .kz.hervor .kz-wert, .jb .kz.hervor .minus,
+/* ---------- Feinschliff: ruhiger, hochwertiger ---------- */
+@keyframes rein { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* Navigation: dunkel, geht nahtlos in den Hero über */
+.jb .nav { background: rgba(29,21,42,.94); border-bottom: 1px solid rgba(255,255,255,.08); color: #F4F2EE; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.jb .nav .logo-hell { display: none !important; }
+.jb .nav .logo-dunkel, .jb[data-theme="dunkel"] .nav .logo-dunkel { display: block !important; }
+.jb .nav-links a { font-weight: 500; letter-spacing: .01em; font-size: 15.5px; color: #C7C0D2; }
+.jb .nav-links a:hover { color: #fff; }
+
+/* Hero: dunkel mit weichem Lichtverlauf, Gelb nur als feiner Akzent */
+.jb .hero, .jb .nav {
+  --tinte: #F4F2EE; --gedaempft: #C7C0D2;
+  --linie: rgba(255,255,255,.14); --linie-stark: rgba(255,255,255,.32);
+  --gruen: var(--gelb); --gruen-hell: var(--gelb-hell); --gruen-auf: #1D152A; --gruen-weich: rgba(248,254,118,.10);
+  --akzent: #C9B48C; --akzent-dunkel: #C9B48C; --fokus: var(--gelb);
+}
+.jb .hero {
+  color: #F4F2EE;
+  background:
+    radial-gradient(60% 80% at 90% 0%, rgba(134,112,80,.34), transparent 62%),
+    radial-gradient(55% 70% at 0% 100%, rgba(78,54,116,.50), transparent 66%),
+    #1D152A;
+  padding: clamp(64px, 9vw, 128px) 0 clamp(72px, 10vw, 140px);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.jb .eyebrow { display: inline-flex; align-items: center; gap: 14px; background: none; padding: 0; border-radius: 0; margin: 0 0 28px; font-size: 12.5px; letter-spacing: .22em; color: var(--akzent-dunkel); }
+.jb .eyebrow::before { content: ""; width: 34px; height: 2px; background: var(--gelb); }
+.jb .hero h1 { font-weight: 600; font-size: clamp(40px, 5.4vw, 78px); line-height: 1; letter-spacing: -.012em; max-width: 15ch; }
+.jb .hero h1 .leicht,
+.jb[data-theme="dunkel"] .hero h1 .leicht { display: block; background: none; padding: 0; margin: 0; font-weight: 300; color: #C9B48C; }
+.jb .hero-text { font-size: 19px; line-height: 1.55; margin-top: 28px; }
+.jb .hero-aktionen { margin-top: 38px; }
+.jb .hero-punkte { margin-top: 44px; color: #DAD4E3; }
+.jb .hero-punkte li::before { background: var(--gelb); }
+@media (prefers-reduced-motion: no-preference) {
+  .jb .hero-raster > * { animation: rein .9s cubic-bezier(.2,.7,.2,1) both; }
+  .jb .hero-raster > *:nth-child(2) { animation-delay: .14s; }
+}
+
+/* Rechenkarte im Hero: Glas auf dunklem Grund */
+.jb .blatt { background: linear-gradient(160deg, rgba(255,255,255,.10), rgba(255,255,255,.03)); border: 1px solid rgba(255,255,255,.18); border-radius: 20px; box-shadow: 0 40px 90px -50px rgba(0,0,0,.7); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.jb .blatt-kopf strong { color: #fff; }
+.jb .blatt-kopf span:last-child { background: none; border: 1px solid rgba(248,254,118,.55); color: var(--gelb); padding: 2px 12px; border-radius: 999px; font-weight: 600; font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; align-self: center; }
+.jb .blatt-gross, .jb .blatt-gross.minus { color: var(--gelb); font-weight: 600; }
+.jb .blatt-zeilen dd { color: #fff; }
+
+/* Beispielwerte-Band: schmal und ruhig */
+.jb .band-hinweis { background: #140F1D; color: #DAD4E3; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 13px; letter-spacing: .01em; }
+.jb .band-hinweis .huelle { display: flex; align-items: center; gap: 12px; }
+.jb .band-hinweis .huelle::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--gelb); }
+
+/* Abschnittsköpfe */
+.jb .sektion-kopf h2, .jb .anfrage-text h2 { font-weight: 600; letter-spacing: -.01em; }
+.jb .sektion-kopf h2::before, .jb .anfrage-text h2::before { content: ""; display: block; width: 36px; height: 2px; background: var(--akzent); margin-bottom: 22px; }
+.jb .sektion { padding: clamp(64px, 10vw, 128px) 0; }
+
+/* Karten: kleinerer Radius, hauchdünner Rand, kaum Schatten */
+.jb .kasten, .jb .kz, .jb .diagramm, .jb details.auf, .jb .schritte, .jb .faq details, .jb form.formular, .jb .dialog, .jb .projekt { border-radius: 14px; }
+.jb:not([data-theme="dunkel"]) .kasten, .jb:not([data-theme="dunkel"]) .kz, .jb:not([data-theme="dunkel"]) .projekt,
+.jb:not([data-theme="dunkel"]) form.formular, .jb:not([data-theme="dunkel"]) .diagramm {
+  box-shadow: 0 1px 2px rgba(29,21,42,.04), 0 18px 40px -30px rgba(29,21,42,.22);
+}
+.jb .kasten > h3 { font-weight: 600; font-size: 21px; }
+
+/* Eingabefelder: klar umrandet statt grau gefüllt */
+.jb .eingabe-zeile, .jb select.auswahl,
+.jb .formular input[type=text], .jb .formular input[type=email], .jb .formular input[type=tel], .jb .formular input[type=password], .jb .formular textarea { background: var(--platte); border-radius: 10px; }
+.jb .eingabe-zeile:focus-within, .jb .formular input:focus, .jb .formular textarea:focus { border-color: var(--tinte); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gelb) 70%, transparent); }
+.jb .segment { border-radius: 10px; }
+.jb .segment button { background: var(--platte); transition: background-color .15s; }
+.jb .segment button:hover { background: var(--papier); }
+.jb .segment button[aria-pressed=true] { background: var(--gruen); }
+.jb .fest { border: 0; border-left: 3px solid var(--akzent); border-radius: 0 8px 8px 0; background: var(--papier); }
+.jb .kfw-box { border-radius: 8px; }
+.jb .marke-tag { background: none; border-color: var(--akzent); color: var(--akzent-dunkel); letter-spacing: .04em; }
+
+/* Buttons: ruhiger, mit gelbem Ring beim Darüberfahren (wie die Website) */
+.jb .knopf { min-height: 48px; padding: 0 28px; letter-spacing: .03em; transition: background-color .15s, border-color .15s, box-shadow .2s, transform .2s; }
+.jb .knopf.klein { min-height: 38px; padding: 0 16px; }
+.jb .knopf:not(.leise):not(:disabled):hover { box-shadow: 0 0 0 3px var(--gelb); transform: translateY(-1px); }
+.jb .hero .knopf:not(.leise):hover { box-shadow: 0 0 0 4px rgba(248,254,118,.28); }
+
+/* Kennzahlen */
+.jb .kz-wert { font-weight: 600; }
+.jb .kz.hervor { background: radial-gradient(110% 150% at 100% 0%, rgba(134,112,80,.38), transparent 58%), #1D152A; border-color: #1D152A; color: #F4F2EE; padding: 24px 26px; }
+.jb .kz.hervor .kz-label, .jb .kz.hervor .kz-sub { color: rgba(244,242,238,.72); }
+.jb .kz.hervor .kz-wert, .jb .kz.hervor .minus { color: var(--gelb); font-size: clamp(40px, 5.4vw, 60px); }
+.jb[data-theme="dunkel"] .kz.hervor { background: radial-gradient(110% 150% at 100% 0%, rgba(134,112,80,.30), transparent 58%), var(--papier); border-color: var(--linie-stark); }
+.jb[data-theme="dunkel"] .kz.hervor .kz-label, .jb[data-theme="dunkel"] .kz.hervor .kz-sub { color: var(--gedaempft); }
 .jb[data-theme="dunkel"] .kz.hervor .minus { color: var(--gelb); }
-.jb .band-hinweis { background: var(--gelb); color: #1D152A; border-bottom: 0; }
-.jb .hero-punkte li::before { background: var(--akzent); }
+
+/* Ablauf */
+.jb .schritt::before { font-size: 56px; letter-spacing: -.02em; }
 .jb .fuss a:hover { color: var(--gelb); }
 .jb[data-theme="dunkel"] .knopf.leise { color: var(--tinte); }
 .jb[data-theme="dunkel"] .knopf.leise:hover { background: var(--gruen-weich); border-color: var(--gelb); }
