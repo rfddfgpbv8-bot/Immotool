@@ -82,40 +82,67 @@ function Segment({ label, wert, onChange, optionen }) {
 function Monatsdiagramm({ zeilen }) {
   if (!zeilen.length) return null;
   const werte = zeilen.map((z) => z.aufwandNachSteuern / 12);
-  const lo = Math.min(0, ...werte);
-  const hi = Math.max(0, ...werte);
-  const spanne = Math.max(100, hi - lo);
-  const B = 560, H = 200, oben = 14, unten = 24, links = 6;
+  const rohLo = Math.min(0, ...werte);
+  const rohHi = Math.max(0, ...werte);
+
+  // Runde Skalenschritte (50, 100, 250 € ...), höchstens etwa 5 Abschnitte
+  const schritte = [25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
+  const spanneRoh = Math.max(50, rohHi - rohLo);
+  const schritt = schritte.find((x) => spanneRoh / x <= 5) || 10000;
+  const lo = Math.floor(rohLo / schritt) * schritt;
+  const hi = Math.max(Math.ceil(rohHi / schritt) * schritt, schritt);
+  const ticks = [];
+  for (let t = lo; t <= hi + 0.001; t += schritt) ticks.push(t);
+
+  const B = 560, H = 250, oben = 24, unten = 26, links = 84, rechts = 6;
   const nutz = H - oben - unten;
+  const spanne = hi - lo;
   const yWert = (v) => oben + ((hi - v) / spanne) * nutz;
   const yNull = yWert(0);
-  const breite = (B - links) / zeilen.length;
+  const breite = (B - links - rechts) / zeilen.length;
   const balken = Math.min(34, breite * 0.62);
+  const zeigeWert = breite >= 36;
   return (
     <figure className="diagramm" style={{ margin: 0 }}>
       <h3>Monatlicher Aufwand nach Steuern</h3>
-      <p>Je Jahr: Was Sie monatlich aus eigener Tasche zahlen oder was übrig bleibt.</p>
+      <p>Je Jahr, in Euro pro Monat: Was Sie aus eigener Tasche zuzahlen oder was übrig bleibt.</p>
       <svg viewBox={`0 0 ${B} ${H}`} role="img"
-        aria-label="Balkendiagramm des monatlichen Aufwands nach Steuern je Jahr">
+        aria-label="Balkendiagramm des monatlichen Aufwands nach Steuern je Jahr in Euro">
+        {ticks.map((t) => (
+          <g key={t}>
+            <line x1={links} x2={B - rechts} y1={yWert(t)} y2={yWert(t)}
+              stroke={t === 0 ? "var(--linie-stark)" : "var(--linie)"} strokeWidth={t === 0 ? 1.4 : 1}
+              strokeDasharray={t === 0 ? undefined : "3 4"} />
+            <text className="achse" x={links - 8} y={yWert(t) + 4} textAnchor="end">
+              {t === 0 ? "0 €" : euro(Math.abs(t))}
+            </text>
+          </g>
+        ))}
+        <text className="achse-titel" x={links - 8} y={11} textAnchor="end">Zuzahlung ↑</text>
+        {lo < 0 && <text className="achse-titel" x={links - 8} y={H - 8} textAnchor="end">Überschuss ↓</text>}
         {zeilen.map((z, i) => {
           const w = werte[i];
           const y1 = yWert(w);
           const x = links + i * breite + (breite - balken) / 2;
+          const hoch = Math.max(1, Math.abs(y1 - yNull));
           return (
             <g key={z.jahr}>
-              <rect x={x} y={Math.min(y1, yNull)} width={balken} height={Math.max(1, Math.abs(y1 - yNull))}
+              <rect x={x} y={Math.min(y1, yNull)} width={balken} height={hoch}
                 rx="2" fill={w > 0 ? "var(--balken-zahlen)" : "var(--balken-uebrig)"}>
                 <title>{z.jahr}: {w > 0 ? "zahlen Sie " : "bleiben "}{euro(Math.abs(w))} pro Monat</title>
               </rect>
-              <text x={x + balken / 2} y={H - 8} textAnchor="middle">{String(z.jahr).slice(2)}</text>
+              {zeigeWert && Math.round(w) !== 0 && (
+                <text className="wertlabel" x={x + balken / 2} textAnchor="middle"
+                  y={w > 0 ? y1 - 5 : y1 + 13}>{eur(Math.abs(w))}</text>
+              )}
+              <text className="achse" x={x + balken / 2} y={H - 8} textAnchor="middle">{String(z.jahr).slice(2)}</text>
             </g>
           );
         })}
-        <line x1={links} x2={B} y1={yNull} y2={yNull} stroke="var(--linie-stark)" strokeWidth="1" />
       </svg>
       <div className="legende">
-        <span><i style={{ background: "var(--balken-zahlen)" }} />Sie zahlen dazu</span>
-        <span><i style={{ background: "var(--balken-uebrig)" }} />Es bleibt etwas übrig</span>
+        <span><i style={{ background: "var(--balken-zahlen)" }} />Sie zahlen dazu (Balken nach oben)</span>
+        <span><i style={{ background: "var(--balken-uebrig)" }} />Es bleibt etwas übrig (Balken nach unten)</span>
       </div>
     </figure>
   );

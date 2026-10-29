@@ -224,6 +224,10 @@ export const KUNDEN_CSS = `
 .jb .diagramm p { font-size: 13.5px; color: var(--gedaempft); margin: 4px 0 12px; }
 .jb .diagramm svg { width: 100%; height: auto; display: block; }
 .jb .diagramm text { font-family: 'Barlow', sans-serif; font-size: 10px; fill: var(--gedaempft); }
+.jb .diagramm .achse { font-size: 11px; font-variant-numeric: tabular-nums; }
+.jb .diagramm .achse-titel { font-size: 11px; fill: var(--akzent-dunkel); font-weight: 600; }
+.jb .diagramm .wertlabel { font-size: 11px; font-weight: 600; fill: var(--tinte); font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) { .jb .diagramm .wertlabel { display: none; } .jb .diagramm .achse { font-size: 13px; } .jb .diagramm .achse-titel { font-size: 12.5px; } }
 .jb .legende { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--gedaempft); margin-top: 8px; }
 .jb .legende i { display: inline-block; width: 10px; height: 10px; margin-right: 6px; }
 
